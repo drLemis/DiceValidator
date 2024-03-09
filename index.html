@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://www.w3schools.com/w3css/3/w3.css">
+
+<head>
+	<title>Dice Validator</title>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
+	<style>
+		html,
+		body {
+			height: 99%;
+			font-family: monospace;
+		}
+
+		.footer {
+			position: fixed;
+			text-align: center;
+			bottom: 0px;
+			width: 100%;
+			background-color: grey;
+		}
+	</style>
+</head>
+
+<body>
+	<form id="diceForm">
+		<label for="diceType">Select dice type:</label>
+		<select id="diceType">
+			<option value="4">D4</option>
+			<option value="6">D6</option>
+			<option value="8">D8</option>
+			<option value="10">D10</option>
+			<option value="12">D12</option>
+			<option value="20" selected="true">D20</option>
+			<option value="100">D100</option>
+			<option value="Custom">Custom</option>
+		</select>
+	</form>
+	<br />
+	<div id="diceGrid"></div>
+	<p>Tracked history: <span id="trackedHistory">...</span></p>
+	<button type="button" onclick="amendLastTracking()">Amend last throw</button>
+	<br />
+	<button type="button" onclick="saveHistory()">Save history</button>
+	<input type="file" id="csvFileInput" accept=".csv" text="Load History">
+	<br />
+	<canvas id="resultsChart" width="600px" height="400px"></canvas>
+	<button type="button" onclick="resetTracking()">Reset Tracking</button>
+	<br />
+	<br />
+
+	<div class="footer">2024.03.09, v1.00</div>
+
+	<script>
+		let trackedResults = [];
+		let customSides = 0;
+		let chartGraph;
+		let diceFaces = 0;
+
+		function createDiceGrid(sides) {
+			diceFaces = sides;
+			let diceGrid = document.getElementById('diceGrid');
+			diceGrid.innerHTML = ''; // clear the grid
+			if (sides <= 0)
+				return;
+
+			let columns = Math.ceil(Math.sqrt(sides));
+			let rows = Math.ceil(sides / columns);
+
+			diceGrid.style.display = 'grid'; // set the display property to grid
+			diceGrid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+			diceGrid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+			diceGrid.style.width = '0px';
+			diceGrid.style.gridAutoRows = '50px'; // set the height of each row
+			diceGrid.style.gridAutoColumns = '50px'; // set the width of each column
+
+			for (let i = 1; i <= sides; i++) {
+				let button = document.createElement('button');
+				button.textContent = i;
+				button.onclick = function () {
+					trackedResults.push(parseInt(this.textContent));
+					updateTrackedValues();
+					plotResults();
+				};
+				button.style.maxWidth = '50px'; // set the maximum width
+				button.style.maxHeight = '50px'; // set the maximum height
+				button.style.aspectRatio = '1 / 1'; // set the aspect ratio to 1:1 for a square button
+				diceGrid.appendChild(button);
+			}
+			resetTracking();
+		}
+
+		document.getElementById('diceType').addEventListener('change', function () {
+			SetupDiceGrid(this.value);
+		});
+
+		function SetupDiceGrid(faces) {
+			if (faces === 'Custom') {
+				let customSides = document.createElement('input');
+				customSides.setAttribute('type', 'number');
+				customSides.setAttribute('id', 'customSidesInput');
+				customSides.setAttribute('placeholder', 'Enter number of sides');
+				customSides.onsubmit = function () {
+					return false;
+				};
+
+				customSides.addEventListener('keypress', function (event) {
+					if (event.key === 'Enter') {
+						event.preventDefault(); // prevent the default form submission
+						let customSidesValue = customSides.value;
+						createDiceGrid(parseInt(parseInt(customSidesValue)));
+					}
+				});
+
+				document.getElementById('diceForm').appendChild(customSides);
+			} else {
+				if (document.getElementById('customSidesInput')) {
+					document.getElementById('customSidesInput').remove();
+				}
+				createDiceGrid(faces);
+			}
+		}
+
+		function updateTrackedValues() {
+			if (trackedResults.length > 0)
+				document.getElementById('trackedHistory').textContent = '[' + trackedResults.length + '] : ' + trackedResults.join(', ');
+			else
+				document.getElementById('trackedHistory').textContent = "...";
+		}
+
+		function amendLastTracking() {
+			if (trackedResults.length > 0)
+				trackedResults.pop();
+			updateTrackedValues();
+			plotResults();
+		}
+
+		function resetTracking() {
+			trackedResults = [];
+			document.getElementById('trackedHistory').textContent = "[0] : ...";
+			plotResults();
+		}
+
+
+		function plotResults() {
+			if (chartGraph) {
+				chartGraph.destroy(); // destroy the existing chart if it exists
+			}
+
+			let countMap = {};
+			for (let i = 0; i < diceFaces; i++)
+				countMap[i + 1] = 0;
+
+			trackedResults.forEach(result => {
+				countMap[result] = (countMap[result] || 0) + 1;
+			});
+
+			for (let i = 0; i < diceFaces; i++) {
+				if (countMap[i + 1] > 0) {
+					countMap[i + 1] = countMap[i + 1] / trackedResults.length * 100;
+				}
+			}
+
+			let labels = Object.keys(countMap);
+			let throwsData = Object.values(countMap);
+
+
+			let midlineMap = {};
+			for (let i = 0; i < diceFaces; i++)
+				midlineMap[i + 1] = 100 / diceFaces;
+			midlineMap[diceFaces] = midlineMap[1];
+			let midlineData = Object.values(midlineMap);
+
+			let ctx = document.getElementById('resultsChart').getContext('2d');
+			chartGraph = new Chart(ctx, {
+				type: 'bar',
+				data: {
+					labels: labels,
+					datasets: [{
+						label: 'Current %',
+						data: throwsData,
+						backgroundColor: 'rgba(54, 162, 235, 0.2)',
+						borderColor: 'rgba(54, 162, 235, 1)',
+						borderWidth: 1,
+						order: 1
+					},
+					{
+						label: 'Target %',
+						data: midlineData,
+						backgroundColor: 'rgba(255, 99, 132, 0.2)',
+						borderColor: 'rgba(255, 99, 132, 1)',
+						borderWidth: 1,
+						type: 'line',
+						order: 0
+					}]
+				},
+				options: {
+					responsive: false,
+					maintainAspectRatio: false,
+					animation: {
+						duration: 0
+					},
+					legend: {
+						display: false
+					},
+					scales: {
+						y: {
+							ticks: {
+								beginAtZero: true,
+								max: 100,
+							}
+						},
+					},
+				}
+			});
+		}
+
+		function saveHistory() {
+			const csv = Papa.unparse([trackedResults]);
+			const blob = new Blob([csv], { type: 'text/csv' });
+
+			const link = document.createElement('a');
+			link.href = URL.createObjectURL(blob);
+			link.download = 'DiceHistory.csv';
+
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+		}
+
+		document.getElementById('csvFileInput').addEventListener('change', function (e) {
+			const file = e.target.files[0];
+			const reader = new FileReader();
+
+			reader.onload = function (event) {
+				const csv = event.target.result;
+				const result = Papa.parse(csv, {
+					header: false,
+					skipEmptyLines: true,
+					delimiter: ','
+				});
+
+				if (result.errors.length > 0) {
+					console.error('Error parsing CSV:', result.errors);
+					return;
+				}
+
+				result.data.forEach(element => {
+					if (element > diceFaces) {
+						console.error('Error parsing CSV: Invalid number of dice faces');
+						return;
+					}
+				});
+
+				trackedResults = result.data[0].map(Number);
+				updateTrackedValues();
+				plotResults();
+			};
+
+			reader.readAsText(file);
+		});
+
+		function loadHistory() {
+
+		}
+
+		SetupDiceGrid(document.getElementById('diceType').value);
+	</script>
+</body>
+
+</html>
