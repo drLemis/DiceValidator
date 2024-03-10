@@ -282,8 +282,8 @@
 			const mean = trackedResults.reduce((acc, val) => acc + val, 0) / trackedResults.length;
 			// Calculate median
 			const sortedNumbers = trackedResults.slice().sort((a, b) => a - b);
-			const middle = Math.floor(sortedNumbers.length / 2);
-			const median = sortedNumbers.length % 2 === 0 ? (sortedNumbers[middle - 1] + sortedNumbers[middle]) / 2 : sortedNumbers[middle];
+			const middle = Math.ceil(sortedNumbers.length / 2);
+			const median = sortedNumbers.length % 2 ? sortedNumbers[middle - 1] : Math.ceil((sortedNumbers[middle - 1] + sortedNumbers[middle]) / 2);
 			// Calculate standard deviation
 			const variance = trackedResults.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / trackedResults.length;
 			const standardDeviation = Math.sqrt(variance);
@@ -292,14 +292,9 @@
 			// Calculate mean
 			const targetMean = (diceFaces + 1) / 2;
 			// Calculate median
-			const targetMedian = (diceFaces + 1) / 2;
+			const targetMedian = Math.ceil((diceFaces + 1) / 2);
 			// Calculate standard deviation
 			const targetStandardDeviation = Math.sqrt((Math.pow(diceFaces, 2) - 1) / 12);
-
-			console.log(diceFaces)
-			console.log(diceFaces + 1)
-			console.log((diceFaces + 1) / 2)
-			console.log(targetMean)
 
 			// Display results
 			document.getElementById('statsTargetOutput').textContent = `Mean: ${targetMean.toFixed(2)}\nMedian: ${targetMedian.toFixed(2)}\nStandard Deviation: ${targetStandardDeviation.toFixed(2)}`
@@ -312,7 +307,7 @@
 
 			const link = document.createElement('a');
 			link.href = URL.createObjectURL(blob);
-			link.download = 'DiceHistory.csv';
+			link.download = 'd' + diceFaces + '_' + trackedResults.length + '_' + Date.now() + '.csv';
 
 			document.body.appendChild(link);
 			link.click();
