@@ -23,6 +23,14 @@
 			width: 100%;
 			background-color: grey;
 		}
+
+		/* make it float on the right of last used element on page */
+		#videoElement {
+			position: relative;
+			width: 144px;
+			height: 144px;
+			background-color: #666;
+		}
 	</style>
 </head>
 
@@ -40,8 +48,19 @@
 			<option value="Custom">Custom</option>
 		</select>
 	</form>
+
+
+
+	<div style="display: inline-block; vertical-align: top;">
+		<div id="diceGrid"></div>
+	</div>
+	<div style="display: inline-block; vertical-align: top;">
+		<video autoplay="true" id="videoElement">
+		</video>
+	</div>
 	<br />
-	<div id="diceGrid"></div>
+	<br />
+	<input type="number" id="customResult" placeholder="Enter custom result">
 	<p>Tracked history: <span id="trackedHistory">...</span></p>
 	<button type="button" onclick="amendLastTracking()">Amend last throw</button>
 	<br />
@@ -49,19 +68,36 @@
 	<input type="file" id="csvFileInput" accept=".csv" text="Load History">
 	<br />
 	<canvas id="resultsChart" width="600px" height="400px"></canvas>
-	<button type="button" onclick="resetTracking()">Reset Tracking</button>
-	<br />
+	<p>Stats target: <span id="statsTargetOutput">...<span></p>
+	<p>Stats actual: <span id="statsActualOutput">...<span></p>
 	<br />
 
-	<div class="footer">2024.03.09, v1.00</div>
+	<div class="footer">2024.03.10, v1.10</div>
 
 	<script>
+		// webcam init
+		var video = document.querySelector("#videoElement");
+
+		if (navigator.mediaDevices.getUserMedia) {
+			navigator.mediaDevices.getUserMedia({ video: true })
+				.then(function (stream) {
+					video.srcObject = stream;
+				})
+				.catch(function (e) {
+					console.log("Something went wrong! : " + e);
+				});
+		}
+
+		let customResultInput = document.getElementById('customResult');
+		let trackedHistoryOutput = document.getElementById('trackedHistory');
+
 		let trackedResults = [];
 		let customSides = 0;
 		let chartGraph;
 		let diceFaces = 0;
 
 		function createDiceGrid(sides) {
+			sides = parseInt(sides);
 			diceFaces = sides;
 			let diceGrid = document.getElementById('diceGrid');
 			diceGrid.innerHTML = ''; // clear the grid
@@ -75,9 +111,10 @@
 			diceGrid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
 			diceGrid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
 
-			diceGrid.style.width = '0px';
-			diceGrid.style.gridAutoRows = '50px'; // set the height of each row
-			diceGrid.style.gridAutoColumns = '50px'; // set the width of each column
+			// width = 50 * columns
+			diceGrid.style.width = columns * 40 + 'px';
+			diceGrid.style.gridAutoRows = '40px'; // set the height of each row
+			diceGrid.style.gridAutoColumns = '40px'; // set the width of each column
 
 			for (let i = 1; i <= sides; i++) {
 				let button = document.createElement('button');
@@ -87,8 +124,8 @@
 					updateTrackedValues();
 					plotResults();
 				};
-				button.style.maxWidth = '50px'; // set the maximum width
-				button.style.maxHeight = '50px'; // set the maximum height
+				button.style.maxWidth = '40px'; // set the maximum width
+				button.style.maxHeight = '40px'; // set the maximum height
 				button.style.aspectRatio = '1 / 1'; // set the aspect ratio to 1:1 for a square button
 				diceGrid.appendChild(button);
 			}
@@ -97,6 +134,18 @@
 
 		document.getElementById('diceType').addEventListener('change', function () {
 			SetupDiceGrid(this.value);
+		});
+
+
+		customResultInput.addEventListener('change', function () {
+			let value = parseInt(customResultInput.value);
+			if (value > 0 && value <= diceFaces) {
+				trackedResults.push(value);
+				updateTrackedValues();
+				plotResults();
+			}
+			customResultInput.value = "";
+			return false;
 		});
 
 		function SetupDiceGrid(faces) {
@@ -127,10 +176,17 @@
 		}
 
 		function updateTrackedValues() {
-			if (trackedResults.length > 0)
-				document.getElementById('trackedHistory').textContent = '[' + trackedResults.length + '] : ' + trackedResults.join(', ');
+			if (trackedResults.length > 0) {
+				trackedHistoryOutput.textContent = "[" + trackedResults.length + "] : ";
+				if (trackedResults.length > 10)
+					trackedHistoryOutput.textContent += "..., ";
+				trackedHistoryOutput.textContent += trackedResults.slice(-10).join(', ');
+			}
+			// show last 10 tracked values
 			else
-				document.getElementById('trackedHistory').textContent = "...";
+				trackedHistoryOutput.textContent = "...";
+
+			calculateStatistics();
 		}
 
 		function amendLastTracking() {
@@ -142,7 +198,7 @@
 
 		function resetTracking() {
 			trackedResults = [];
-			document.getElementById('trackedHistory').textContent = "[0] : ...";
+			trackedHistoryOutput.textContent = "[0] : ...";
 			plotResults();
 		}
 
@@ -218,6 +274,36 @@
 					},
 				}
 			});
+		}
+
+		function calculateStatistics() {
+			// ACTUAL
+			// Calculate mean
+			const mean = trackedResults.reduce((acc, val) => acc + val, 0) / trackedResults.length;
+			// Calculate median
+			const sortedNumbers = trackedResults.slice().sort((a, b) => a - b);
+			const middle = Math.floor(sortedNumbers.length / 2);
+			const median = sortedNumbers.length % 2 === 0 ? (sortedNumbers[middle - 1] + sortedNumbers[middle]) / 2 : sortedNumbers[middle];
+			// Calculate standard deviation
+			const variance = trackedResults.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / trackedResults.length;
+			const standardDeviation = Math.sqrt(variance);
+
+			// TARGET
+			// Calculate mean
+			const targetMean = (diceFaces + 1) / 2;
+			// Calculate median
+			const targetMedian = (diceFaces + 1) / 2;
+			// Calculate standard deviation
+			const targetStandardDeviation = Math.sqrt((Math.pow(diceFaces, 2) - 1) / 12);
+
+			console.log(diceFaces)
+			console.log(diceFaces + 1)
+			console.log((diceFaces + 1) / 2)
+			console.log(targetMean)
+
+			// Display results
+			document.getElementById('statsTargetOutput').textContent = `Mean: ${targetMean.toFixed(2)}\nMedian: ${targetMedian.toFixed(2)}\nStandard Deviation: ${targetStandardDeviation.toFixed(2)}`
+			document.getElementById('statsActualOutput').textContent = `Mean: ${mean.toFixed(2)}\nMedian: ${median.toFixed(2)}\nStandard Deviation: ${standardDeviation.toFixed(2)}`
 		}
 
 		function saveHistory() {
